@@ -822,6 +822,7 @@ function row(id, label, sub, body, h, muteKey, extra='', rs=''){
 }
 function render(){
   const tl = $('tl'), sx = tl.scrollLeft;
+  const ae = document.activeElement, keep = ae && ae.id === 'chordIn' && ui.sel?.type === 'chord' ? {slot: ui.sel.slot, v: ae.value, a: ae.selectionStart, b: ae.selectionEnd} : null;
   let html = '';
   let rh = ''; for (let b=0;b<song.bars;b++){ const ph = b % song.phrase === 0; rh += `<div style="position:absolute;left:${b*BAR*STEP}px;width:${BAR*STEP}px;top:0;height:26px;border-left:${ph?2:1}px solid ${ph?'var(--ink)':'var(--line)'};padding:3px 6px;font-size:12px;font-weight:${ph?700:400};color:${ph?'var(--ink)':'var(--sub)'}">${b+1}${ph?` <span style="font-weight:400;color:var(--sub)">フレーズ ${b/song.phrase+1}</span>`:''}</div>`; }
   html += row('r-ruler','小節','',`<div class="ruler" id="ruler">${rh}</div>`,26);
@@ -840,7 +841,12 @@ function render(){
   if (ui.views.chord && ui.cview==='staff') drawStaff($('cstaff'), 'chord');
   if (ui.views.melody) ui.mview==='roll' ? drawRoll($('mel')) : drawStaff($('mel'), 'melody');
   renderControls(); renderSide(); drawAnno(); renderMbar();
-  const ci = $('chordIn'); if (ci){ chordPreview(); if (ui.focusChord){ ui.focusChord = false; ci.focus(); ci.select(); } }
+  const ci = $('chordIn');
+  if (ci){
+    if (keep && keep.slot === ui.sel?.slot && !ui.focusChord){ ci.value = keep.v; ci.focus({preventScroll:true}); try { ci.setSelectionRange(keep.a, keep.b); } catch {} }
+    else if (ui.focusChord){ ui.focusChord = false; ci.focus(); ci.select(); }
+    chordPreview();
+  }
 }
 function drumHTML(){
   const names = {kick:'キック',snare:'スネア',hat:'ハット',clap:'クラップ'};
@@ -1599,7 +1605,7 @@ $('play').onclick = play; $('undo').onclick = undo; $('redo').onclick = redo;
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { ui.tab = b.dataset.t; renderSide(); });
 document.querySelectorAll('#annoT button').forEach(b => b.onclick = () => { ui.anno[b.dataset.k] = !ui.anno[b.dataset.k]; renderControls(); drawAnno(); });
 $('tl').addEventListener('scroll', () => { clearTimeout(ui._st); ui._st = setTimeout(drawAnno, 120); });
-window.addEventListener('resize', () => { clearTimeout(ui._rt); ui._rt = setTimeout(drawAnno, 150); });
+window.addEventListener('resize', () => { clearTimeout(ui._rt); ui._rt = setTimeout(() => { if (document.activeElement?.id !== 'chordIn') drawAnno(); }, 150); });
 
 /* 保存・読込 */
 $('ioBtn').onclick = () => { $('ioText').value = JSON.stringify(song); $('ioMsg').textContent = ''; $('io').showModal(); };
@@ -1809,7 +1815,11 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 }
 // 提案などを押したらシートを閉じて結果を見せる
 $('pane').addEventListener('click', e => { if (!MOBILE) return; const b = e.target.closest('button'); if (b && (b.dataset.addN || b.dataset.putAt || b.dataset.repl || b.dataset.before || b.dataset.jump || b.dataset.exi || b.dataset.eri || b.id==='rgApply')) document.body.classList.remove('sheet'); });
-window.addEventListener('resize', () => { clearTimeout(ui._lt); ui._lt = setTimeout(() => { const m = MOBILE; applyLayout(); if (m !== MOBILE){ document.body.classList.remove('sheet'); } render(); }, 200); });
+ui._lastW = window.innerWidth;
+window.addEventListener('resize', () => { clearTimeout(ui._lt); ui._lt = setTimeout(() => {
+  if (window.innerWidth === ui._lastW) return;          // キーボードの開閉（高さだけの変化）では描き直さない
+  ui._lastW = window.innerWidth;
+  const m = MOBILE; applyLayout(); if (m !== MOBILE){ document.body.classList.remove('sheet'); } render(); }, 200); });
 
 /* ============ ファイル読込・保存（アプリ版のみ保存） ============ */
 const APP = window.AndroidBridge;
