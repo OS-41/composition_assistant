@@ -190,6 +190,11 @@ body.app .app-only{display:inline-flex}
 .mbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sheetMin,64px) + 10px);z-index:25;display:none;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:5px;box-shadow:0 6px 20px rgba(0,0,0,.16);max-width:calc(100vw - 16px);overflow-x:auto}
 .mbar button{min-height:42px;min-width:42px;padding:0 10px;font-size:16px;flex:none}
 .mbar button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-size:14px}
+.mbar.note{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));width:min(calc(100vw - 16px),440px);overflow:visible}
+.mbar.note button{min-width:0;padding:0 4px}
+.mbar button.del{background:var(--D);border-color:var(--D);color:#fff;font-size:14px;font-weight:700}
+.mbar .w2{grid-column:span 2}
+#mel,#cstaff{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #pop .popopen{display:none}
 body.touch #pop{pointer-events:auto}
 body.touch #pop .popopen{display:inline-flex;margin-top:8px;align-items:center;min-height:38px;padding:0 12px;border-radius:9px;background:var(--acc);color:#fff;text-decoration:none;font-weight:700}
@@ -1023,7 +1028,7 @@ function assistHTML(){
     let h = `<h2>選択中のノート</h2><div class="card"><div class="big">${pname(n.p)} <span style="font-size:16px">${KER[r]}${sh?' / '+sh.label:''}</span></div>
       <dl class="kv" style="margin-top:8px"><dt>カーネル</dt><dd>${kd ? S_(kd[2], `${KER[r]}：${esc(kd[0])}。${esc(kd[1])}`) : S_('pm','スケール外の音。コードの構成音なら借用や変位として機能します。')}</dd>
       <dt>シェル</dt><dd>${sh ? S_(SHELL_DESC[sh.n][2], `${sh.label}（${esc(chordName(c))} に対して）：${esc(SHELL_DESC[sh.n][1])}`) : '<span class="muted">コードがありません</span>'}</dd>
-      <dt>拍</dt><dd>${S_('beat', `${Math.floor(n.s%16/4)+1} 拍目${n.s%4?'の裏':''}（${isStrong(n.s)?'強拍':'弱拍'}）`)}</dd></dl></div>`;
+      <dt>拍</dt><dd>${S_('beat', `${Math.floor(n.s%16/4)+1} 拍目${n.s%4?'の裏':''}（${isStrong(n.s)?'強拍':'弱拍'}）`)}</dd></dl><div class="palette" style="margin-top:8px"><button data-delnote="1" style="color:var(--D);border-color:var(--D)">🗑 この音符を削除</button><span class="muted desk-only" style="align-self:center">Delete キー・右クリックでも消せます</span><span class="muted touch-only" style="align-self:center">音符の長押しでも消せます</span></div></div>`;
     h += nextNotesHTML();
     return h;
   }
@@ -1660,7 +1665,14 @@ function handleDown(e, allowDrag){
   }
 }
 let tap = null;
+$('rows').addEventListener('contextmenu', e => {
+  const el = e.target.closest('#mel [data-id]'); if (!el) return;
+  e.preventDefault(); tap = null;
+  const id = +el.dataset.id; ui.sel = {type:'note', id}; fakeKey('Delete');
+  if (navigator.vibrate) try { navigator.vibrate(20); } catch {}
+});
 $('rows').addEventListener('pointerdown', e => {
+  if (e.button === 2) return;   // 右クリックは削除（contextmenu）に回す
   if (e.pointerType !== 'mouse' && e.target.closest('svg') && !e.target.closest('.vrs')){ tap = {x:e.clientX, y:e.clientY, t:Date.now(), ev:{clientX:e.clientX, clientY:e.clientY, target:e.target, pointerId:e.pointerId}}; return; }
   handleDown(e, true);
 });
@@ -1715,6 +1727,7 @@ function onAction(e){
   if (ds.before && ui.sel?.type==='chord'){ const i = ui.sel.slot; if (i>0) { const keep = i; mutate(()=>{ song.chords[i-1] = JSON.parse(ds.before); ui.sel={type:'chord',slot:keep}; }); } }
   if (ds.put && ui.sel?.type==='chord') setChord(ui.sel.slot, fromToken(ds.put));
   if (ds.q!==undefined && ui.sel?.type==='chord'){ const c = song.chords[ui.sel.slot]; if (c) setChord(ui.sel.slot, mk(c.root, ds.q)); }
+  if (ds.delnote && ui.sel?.type==='note'){ fakeKey('Delete'); return; }
   if (ds.audN) { const p = +ds.audN; audition((tt,g)=>tone(p,tt,0.4,g,'triangle',0.2)); }
   if (ds.addN) addNote(+ds.addN, +ds.at, curDur());
   if (ds.pat) mutate(() => { if (ui.selBar!=null) applyPattern(song, ds.pat, ui.selBar); else for (let b=0;b<song.bars;b++) applyPattern(song, ds.pat, b); });
@@ -1793,7 +1806,10 @@ function renderMbar(){
   const bar = $('mbar'); if (!bar) return;
   if (!MOBILE || ui.sel?.type==='chord'){ bar.style.display = 'none'; return; }
   const note = ui.sel?.type==='note';
-  bar.innerHTML = `<button class="pri" data-mk="Enter" title="次の音の候補 1 位を追加">⏎ 候補</button>` + (note ? `<button data-mk="ArrowUp" title="音階で上へ">↑</button><button data-mk="ArrowDown" title="音階で下へ">↓</button><button data-mk="ArrowLeft" title="左へ">←</button><button data-mk="ArrowRight" title="右へ">→</button><button data-mk="ArrowLeft" data-sh="1" title="短く">短</button><button data-mk="ArrowRight" data-sh="1" title="長く">長</button><button data-mk="Delete" title="削除">🗑</button><button data-mk="Escape" title="選択を解除">✕</button>` : `<button id="mPlay">${playing?'■':'▶'}</button>`);
+  bar.classList.toggle('note', note);
+  bar.innerHTML = note
+    ? `<button class="pri" data-mk="Enter" title="次の音の候補 1 位を追加">⏎ 候補</button><button data-mk="ArrowUp" title="音階で上へ">↑</button><button data-mk="ArrowDown" title="音階で下へ">↓</button><button data-mk="ArrowLeft" title="左へ">←</button><button data-mk="ArrowRight" title="右へ">→</button><button data-mk="ArrowLeft" data-sh="1" title="短く">短く</button><button data-mk="ArrowRight" data-sh="1" title="長く">長く</button><button class="del w2" data-mk="Delete" title="この音符を削除">🗑 削除</button><button data-mk="Escape" title="選択を解除">✕</button>`
+    : `<button class="pri" data-mk="Enter" title="次の音の候補 1 位を追加">⏎ 候補</button><button id="mPlay">${playing?'■':'▶'}</button>`;
   bar.style.display = ui.views.melody ? 'flex' : 'none';
 }
 $('mbar').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.id==='mPlay'){ play(); renderMbar(); return; } fakeKey(b.dataset.mk, b.dataset.sh); });
